@@ -37,6 +37,7 @@ class GithubAiCoderStack(Stack):
             self, "PRReviewFunction",
             entry="lambda",
             index="handler.py",
+            handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
             environment={
 
@@ -113,6 +114,7 @@ class GithubAiCoderStack(Stack):
             self, "ApiHandler",
             entry="lambda",
             index="api_handler.py",
+            handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
             environment={
                 "STATE_MACHINE_ARN": workflow.state_machine_arn,
