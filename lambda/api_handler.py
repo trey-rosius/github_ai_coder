@@ -25,7 +25,7 @@ class ReviewRequest(BaseModel):
     repository: str = Field(..., description="GitHub repository name")
     pull_request_number: int = Field(..., description="Pull request number", gt=0)
     owner: str = Field(..., description="Repository owner")
-    branch: str | None = Field(None, description="Branch name")
+    branch: str | None = Field(None, description="Github Branch name")
 
 
 # Initialize AWS clients
