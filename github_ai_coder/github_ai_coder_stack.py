@@ -4,6 +4,7 @@ from aws_cdk import (
     Stack,
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as tasks,
+    aws_secretsmanager as secretsmanager,
     aws_lambda as _lambda,
     aws_iam as iam,
     aws_apigateway as apigateway,
@@ -20,6 +21,13 @@ class GithubAiCoderStack(Stack):
         sfn_role = iam.Role(
             self, "PRReviewerStepFunctionRole",
             assumed_by=iam.ServicePrincipal("states.amazonaws.com")
+        )
+
+        # Step 1: Define the secret (if it doesn't already exist)
+        secret = secretsmanager.Secret.from_secret_name_v2(
+            self,
+            "ExistingStripeSecret",
+            secret_name="dev/github_token",  # Name of the existing secret
         )
 
         # Add permissions for Bedrock
@@ -57,6 +65,8 @@ class GithubAiCoderStack(Stack):
             },
             timeout=Duration.seconds(60)
         )
+
+        secret.grant_read(pr_review_lambda)
         # Load the ASL definition from the JSON file
         with open("./state_machine/github_review_workflow.asl.json", "r") as file:
             state_machine_definition = json.load(file)
