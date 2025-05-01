@@ -266,7 +266,7 @@ def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews_dat
                 review_text = review.get('review', '')
 
                 if not review_text:
-                    logger.warning(f"Skipping empty review for {filename}")
+                    logger.warning(f"Skipping empty reviews for {filename}")
                     failed_posts += 1
                     continue
 
