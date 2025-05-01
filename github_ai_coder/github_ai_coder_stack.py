@@ -117,13 +117,13 @@ class GithubAiCoderStack(Stack):
             handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
             environment={
-                "STATE_MACHINE_ARN": workflow.state_machine_arn,
                 "POWERTOOLS_SERVICE_NAME": "pr-reviewer-api",
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
                 "LOG_LEVEL": "INFO"
             },
             timeout=Duration.seconds(30)
         )
+        api_lambda.add_environment("STATE_MACHINE_ARN",workflow.state_machine_arn)
 
         # Grant permissions to invoke Step Functions
         api_lambda.add_to_role_policy(

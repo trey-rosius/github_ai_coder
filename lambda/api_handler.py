@@ -19,7 +19,7 @@ tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver()
 
-
+state_machine_arn = os.environ.get("STATE_MACHINE_ARN")
 # Define input validation schemas
 class ReviewRequest(BaseModel):
     repository: str = Field(..., description="GitHub repository name")
@@ -53,7 +53,7 @@ def handle_review_request() -> Dict[str, Any]:
 
     # Start Step Functions execution
     response = sfn_client.start_execution(
-        stateMachineArn=os.environ['STATE_MACHINE_ARN'],
+        stateMachineArn=state_machine_arn,
         input=json.dumps({
             'repository': review_request.repository,
             'pull_request_number': review_request.pull_request_number,
