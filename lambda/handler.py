@@ -216,10 +216,33 @@ def generate_review_with_bedrock(changes_data: Any) -> List[Dict[str, Any]]:
         }]
 
 
-def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: List[Dict[str, Any]]):
-    """Post review comments to GitHub with enhanced error handling"""
+def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews_data: Any):
+    """Post review comments to GitHub with robust JSON handling"""
     try:
         logger.info(f"Posting comments to PR {pr_number} in {owner}/{repo_name}")
+
+        # Parse reviews_data if it's a string
+        if isinstance(reviews_data, str):
+            try:
+                parsed_data = json.loads(reviews_data)
+                reviews = parsed_data.get('reviews', []) if isinstance(parsed_data, dict) else []
+            except json.JSONDecodeError as e:
+                logger.error("Failed to parse reviews JSON", exc_info=True)
+                raise PRReviewError("Invalid reviews format - could not parse JSON")
+        elif isinstance(reviews_data, dict):
+            reviews = reviews_data.get('reviews', [])
+        elif isinstance(reviews_data, list):
+            reviews = reviews_data
+        else:
+            logger.error(f"Unexpected reviews type: {type(reviews_data)}")
+            raise PRReviewError(f"Invalid reviews format - expected list or dict, got {type(reviews_data)}")
+
+        if not isinstance(reviews, list):
+            logger.error(f"Reviews should be a list, got {type(reviews)}")
+            raise PRReviewError("Invalid reviews format - expected list")
+
+        logger.info(f"Processing {len(reviews)} reviews")
+        logger.debug(f"Sample review: {reviews[0] if reviews else 'No reviews'}")
 
         repo = github.get_repo(f"{owner}/{repo_name}")
         pr = repo.get_pull(pr_number)
@@ -229,40 +252,54 @@ def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: Li
 
         for review in reviews:
             try:
-                if 'error' in review:
-                    logger.warning(f"Skipping failed review for {review['file']}")
+                if not isinstance(review, dict):
+                    logger.warning(f"Skipping non-dictionary review: {review}")
                     failed_posts += 1
                     continue
 
-                logger.debug(f"Posting review for {review['file']}")
+                if 'error' in review:
+                    logger.warning(f"Skipping failed review: {review.get('file', 'unknown_file')}")
+                    failed_posts += 1
+                    continue
 
+                filename = review.get('file', 'unknown_file')
+                review_text = review.get('review', '')
+
+                if not review_text:
+                    logger.warning(f"Skipping empty review for {filename}")
+                    failed_posts += 1
+                    continue
+
+                logger.debug(f"Posting review for {filename}")
                 pr.create_review(
-                    body=review['review'],
+                    body=review_text,
                     event='COMMENT'
                 )
-
                 successful_posts += 1
-                logger.debug(f"Successfully posted review for {review['file']}")
+                logger.debug(f"Successfully posted review for {filename}")
 
             except GithubException as ge:
                 failed_posts += 1
-                logger.error(f"Failed to post review for {review['file']}: {str(ge)}")
+                logger.error(f"GitHub API error posting review for {filename}: {str(ge)}")
             except Exception as e:
                 failed_posts += 1
-                logger.error(f"Unexpected error posting review for {review['file']}: {str(e)}", exc_info=True)
+                logger.error(f"Unexpected error posting review for {filename}: {str(e)}", exc_info=True)
 
         logger.info(f"Review posting completed. Successful: {successful_posts}, Failed: {failed_posts}")
+        return {
+            'status': 'completed',
+            'successful_posts': successful_posts,
+            'failed_posts': failed_posts
+        }
 
     except GithubException as ge:
-        error_msg = f"GitHub API error posting reviews: {str(ge)}"
+        error_msg = f"GitHub API error: {str(ge)}"
         logger.error(error_msg)
         raise PRReviewError(error_msg)
     except Exception as e:
-        error_msg = f"Unexpected error posting reviews: {str(e)}"
+        error_msg = f"Unexpected error: {str(e)}"
         logger.error(error_msg, exc_info=True)
         raise PRReviewError(error_msg)
-
-
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
 @tracer.capture_lambda_handler
 @metrics.log_metrics
