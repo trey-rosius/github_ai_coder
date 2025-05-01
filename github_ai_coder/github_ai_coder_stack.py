@@ -31,6 +31,16 @@ class GithubAiCoderStack(Stack):
                 resources=["*"]
             )
         )
+        sfn_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "lambda:InvokeFunction"
+                ],
+                resources=[
+                    "*"
+                ]
+            )
+        )
 
         # Create Lambda function for PR review
         pr_review_lambda = PythonFunction(
@@ -123,6 +133,7 @@ class GithubAiCoderStack(Stack):
             },
             timeout=Duration.seconds(30)
         )
+
         api_lambda.add_environment("STATE_MACHINE_ARN",workflow.state_machine_arn)
 
         # Grant permissions to invoke Step Functions

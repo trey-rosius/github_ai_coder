@@ -24,8 +24,8 @@
         "Payload": {
           "action": "fetch_changes",
           "repository": "{% $states.input.repository %}",
-          "pull_request_number.$": "{% $states.input.pull_request_number %}",
-          "owner.$": "{% $states.input.owner %}"
+          "pull_request_number": "{% $states.input.pull_request_number %}",
+          "owner": "{% $states.input.owner %}"
         }
       },
       "Output": {
