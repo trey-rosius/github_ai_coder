@@ -43,22 +43,23 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 @tracer.capture_method
 def handle_review_request() -> Dict[str, Any]:
     """Handle POST /review request"""
-    review_request: ReviewRequest = app.current_event.json_body
+    review_request = app.current_event.json_body
+    logger.info(f"json body {review_request}")
 
     logger.info("Starting PR review", extra={
-        "repository": review_request.repository,
-        "pr_number": review_request.pull_request_number,
-        "owner": review_request.owner
+        "repository": review_request['repository'],
+        "pr_number": review_request['pull_request_number'],
+        "owner": review_request['owner']
     })
 
     # Start Step Functions execution
     response = sfn_client.start_execution(
         stateMachineArn=state_machine_arn,
         input=json.dumps({
-            'repository': review_request.repository,
-            'pull_request_number': review_request.pull_request_number,
-            'owner': review_request.owner,
-            'branch': review_request.branch
+            'repository': review_request['repository'],
+            'pull_request_number': review_request['pull_request_number'],
+            'owner': review_request['owner'],
+            'branch': review_request['branch']
         })
     )
 
