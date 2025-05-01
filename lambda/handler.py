@@ -12,6 +12,7 @@ from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.utilities.parameters import SecretsProvider
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from utils import get_github_token
 
 # Initialize Powertools
 logger = Logger()
@@ -33,15 +34,13 @@ class PRReviewError(Exception):
 def initialize_clients() -> tuple:
     """Initialize AWS and GitHub clients with error handling"""
     try:
-        config = Config(region_name="us-east-1")
-        secrets_provider = SecretsProvider(config=config)
 
-        github_token = secrets_provider.get(GITHUB_TOKEN_SECRET_NAME)
+        github_token = get_github_token()
         if not github_token:
             raise PRReviewError("Failed to retrieve GitHub token from Secrets Manager")
 
         github_client = Github(github_token)
-        bedrock_client = boto3.client('bedrock-runtime', config=config)
+        bedrock_client = boto3.client('bedrock-runtime')
 
         return github_client, bedrock_client
     except Exception as e:
@@ -92,82 +91,129 @@ def fetch_pr_changes(repo_name: str, pr_number: int, owner: str) -> List[Dict[st
         raise PRReviewError(error_msg)
 
 
-def generate_review_with_bedrock(changes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Generate code review using Amazon Bedrock with enhanced error handling"""
+def generate_review_with_bedrock(changes_data: Any) -> List[Dict[str, Any]]:
+    """Generate code review using Amazon Bedrock with proper JSON handling"""
     reviews = []
 
-    if not changes:
-        logger.warning("No changes provided to generate review")
+    try:
+        # First parse the input if it's a string
+        if isinstance(changes_data, str):
+            try:
+                parsed_data = json.loads(changes_data)
+                changes = parsed_data.get('changes', [])
+            except json.JSONDecodeError as e:
+                logger.error("Failed to parse input JSON", exc_info=True)
+                return []
+        elif isinstance(changes_data, dict):
+            changes = changes_data.get('changes', [])
+        else:
+            logger.error(f"Unexpected input type: {type(changes_data)}")
+            return []
+
+        if not isinstance(changes, list):
+            logger.error(f"Changes should be a list, got {type(changes)}")
+            return []
+
+        if not changes:
+            logger.warning("No changes provided to generate review")
+            return reviews
+
+        logger.info(f"Generating reviews for {len(changes)} files")
+
+        for index, change in enumerate(changes, start=1):
+            try:
+                if not isinstance(change, dict):
+                    logger.warning(f"Skipping non-dictionary change at position {index}")
+                    continue
+
+                filename = change.get('filename', f'unknown_file_{index}')
+
+                if 'patch' not in change or not change['patch']:
+                    logger.warning(f"Skipping file {filename} as it has no patch content")
+                    continue
+
+                logger.debug(f"Processing file {index}/{len(changes)}: {filename}")
+
+                prompt = f"""
+                Review the following code changes and provide:
+                1. A detailed review comment
+                2. Code improvement suggestions
+                3. Potential issues or bugs
+
+                File: {filename}
+                Status: {change.get('status', 'unknown')}
+                Changes:
+                {change['patch']}
+                """
+
+                logger.debug(f"Generated prompt for {filename}")
+
+                # Prepare the Bedrock request
+                request_body = {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": MAX_TOKENS,
+                    "temperature": TEMPERATURE,
+                    "messages": [{
+                        "role": "user",
+                        "content": prompt
+                    }]
+                }
+
+                logger.debug(f"Sending request to Bedrock for {filename}")
+                response = bedrock.invoke_model(
+                    modelId=BEDROCK_MODEL_ID,
+                    body=json.dumps(request_body))
+
+                # Process the response
+                response_body = json.loads(response['body'].read())
+
+                if not response_body.get('content'):
+                    raise PRReviewError("No content in Bedrock response")
+
+                review_text = ""
+                for content in response_body['content']:
+                    if content['type'] == 'text':
+                        review_text += content['text'] + "\n"
+
+                if not review_text.strip():
+                    raise PRReviewError("Empty review content from Bedrock")
+
+                reviews.append({
+                    'file': filename,
+                    'review': review_text.strip(),
+                    'status': change.get('status', 'reviewed'),
+                    'model': BEDROCK_MODEL_ID
+                })
+
+                logger.debug(f"Successfully generated review for {filename}")
+
+            except (BotoCoreError, ClientError) as be:
+                error_msg = f"Bedrock API error for {filename}: {str(be)}"
+                logger.error(error_msg)
+                reviews.append({
+                    'file': filename,
+                    'error': error_msg,
+                    'status': 'failed'
+                })
+            except Exception as e:
+                error_msg = f"Unexpected error processing {filename}: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                reviews.append({
+                    'file': filename,
+                    'error': error_msg,
+                    'status': 'failed'
+                })
+
+        success_count = len([r for r in reviews if 'error' not in r])
+        logger.info(f"Completed review generation. Success: {success_count}, Failed: {len(changes) - success_count}")
         return reviews
 
-    logger.info(f"Generating reviews for {len(changes)} files")
-
-    for index, change in enumerate(changes, start=1):
-        try:
-            if 'patch' not in change or not change['patch']:
-                logger.warning(f"Skipping file {change['filename']} as it has no patch content")
-                continue
-
-            logger.debug(f"Processing file {index}/{len(changes)}: {change['filename']}")
-
-            prompt = f"""
-            Review the following code changes and provide:
-            1. A detailed review comment
-            2. Code improvement suggestions
-            3. Potential issues or bugs
-
-            File: {change['filename']}
-            Status: {change['status']}
-            Changes:
-            {change['patch']}
-            """
-
-            logger.debug(f"Generated prompt for {change['filename']}")
-
-            response = bedrock.invoke_model(
-                modelId=BEDROCK_MODEL_ID,
-                body=json.dumps({
-
-                    "messages": [{"role": "user", "content": prompt}],
-                    "top_p": 0.9,
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens_to_sample": MAX_TOKENS,
-                    "temperature": TEMPERATURE,
-                })
-            )
-
-            response_body = json.loads(response["body"].read())
-            review_text = response_body.get("content", [{}])[0].get("text", "")
-
-            logger.info(f"review text {review_text}")
-
-            reviews.append({
-                'file': change['filename'],
-                'review': review_text,
-                'status': change['status']
-            })
-
-            logger.debug(f"Successfully generated review for {change['filename']}")
-
-        except (BotoCoreError, ClientError) as be:
-            error_msg = f"Bedrock API error processing {change['filename']}: {str(be)}"
-            logger.error(error_msg)
-            reviews.append({
-                'file': change['filename'],
-                'error': error_msg,
-                'status': 'failed'
-            })
-        except Exception as e:
-            error_msg = f"Unexpected error processing {change['filename']}: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            reviews.append({
-                'file': change['filename'],
-                'error': error_msg,
-                'status': 'failed'
-            })
-
-    logger.info(f"Completed review generation with {len([r for r in reviews if 'error' not in r])} successful reviews")
-    return reviews
+    except Exception as e:
+        logger.error(f"Critical error in review generation: {str(e)}", exc_info=True)
+        return [{
+            'error': f"Failed to process reviews: {str(e)}",
+            'status': 'failed'
+        }]
 
 
 def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: List[Dict[str, Any]]):

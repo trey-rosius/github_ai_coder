@@ -63,10 +63,20 @@ class GithubAiCoderStack(Stack):
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
                 "LOG_LEVEL": "INFO"
             },
-            timeout=Duration.seconds(60)
+            timeout=Duration.minutes(10)
         )
 
         secret.grant_read(pr_review_lambda)
+        pr_review_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                ],
+                resources=["*"],
+                # Grant access to all Bedrock models
+            )
+        )
         # Load the ASL definition from the JSON file
         with open("./state_machine/github_review_workflow.asl.json", "r") as file:
             state_machine_definition = json.load(file)
