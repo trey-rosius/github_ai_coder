@@ -1,0 +1,51 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - master
+
+jobs:
+  trigger-review:
+    runs-on: ubuntu-latest
+    outputs:
+      execution_arn: ${{ steps.trigger.outputs.execution_arn }}
+    steps:
+      - name: Trigger AI Review
+        id: trigger
+        env:
+          API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          response=$(curl -X POST $API_ENDPOINT/review \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $API_KEY" \
+            -d '{
+              "repository": "${{ github.event.repository.name }}",
+              "pull_request_number": ${{ github.event.pull_request.number }},
+              "owner": "${{ github.event.repository.owner.login }}",
+              "branch": "${{ github.head_ref }}"
+            }')
+          
+          # Extract execution_arn from response
+          execution_arn=$(echo $response | jq -r '.execution_arn')
+          echo "execution_arn=$execution_arn" >> $GITHUB_OUTPUT
+
+  check-review-status:
+    needs: trigger-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Review Status
+        env:
+          API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
+          API_KEY: ${{ secrets.API_KEY }}
+          EXECUTION_ARN: ${{ needs.trigger-review.outputs.execution_arn }}
+        run: |
+          # Wait for 30 seconds to allow the review to process
+          sleep 30
+          
+          # Check the status
+          curl -X GET $API_ENDPOINT/status/$EXECUTION_ARN \
+            -H "x-api-key: $API_KEY" 

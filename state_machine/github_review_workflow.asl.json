@@ -1,0 +1,91 @@
+{
+  "StartAt": "FetchPRChanges",
+  "States": {
+    "FetchPRChanges": {
+      "Next": "GenerateReview",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ClientExecutionTimeoutException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "QueryLanguage": "JSONata",
+      "Arguments": {
+        "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}",
+        "Payload": {
+          "action": "fetch_changes",
+          "repository": "{% $states.input.repository %}",
+          "pull_request_number.$": "{% $states.input.pull_request_number %}",
+          "owner.$": "{% $states.input.owner %}"
+        }
+      },
+      "Output": {
+        "changes": "{% $states.result %}"
+      }
+    },
+    "GenerateReview": {
+      "Next": "PostReviewComments",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ClientExecutionTimeoutException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "QueryLanguage": "JSONata",
+      "Arguments": {
+        "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}",
+        "Payload": {
+          "action": "generate_review",
+          "changes": "{% $states.input.changes %}"
+        }
+      }
+    },
+    "PostReviewComments": {
+      "End": true,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ClientExecutionTimeoutException",
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "QueryLanguage": "JSONata",
+      "Arguments": {
+        "Payload": {
+          "action": "post_comments",
+          "review": "{% $states.input.reviews %}",
+          "repository": "{% $states.context.Execution.Input.repository %}",
+          "pull_request_number": "{% $states.context.Execution.Input.pull_request_number %}",
+          "owner": "{% $states.context.Execution.Input.owner %}"
+        },
+        "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}"
+      }
+    }
+  }
+}
