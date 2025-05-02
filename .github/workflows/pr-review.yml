@@ -19,23 +19,39 @@ jobs:
           API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
-          response=$(curl -X POST $API_ENDPOINT/review \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: $API_KEY" \
-            -d '{
-              "repository": "${{ github.event.repository.name }}",
-              "pull_request_number": ${{ github.event.pull_request.number }},
-              "owner": "${{ github.event.repository.owner.login }}",
-              "branch": "${{ github.head_ref }}",
-              "pr_author": "${{ github.event.pull_request.user.login }}",
-              "pr_title": "${{ toJson(github.event.pull_request.title) }}",
-              "pr_state": "${{ github.event.pull_request.state }}",
-              "pr_created_at": "${{ github.event.pull_request.created_at }}",
-              "commit_sha": "${{ github.event.pull_request.head.sha }}"
+          # Create properly formatted JSON payload
+          payload=$(jq -n \
+            --arg repo "${{ github.event.repository.name }}" \
+            --arg pr_num "${{ github.event.pull_request.number }}" \
+            --arg owner "${{ github.event.repository.owner.login }}" \
+            --arg branch "${{ github.head_ref }}" \
+            --arg author "${{ github.event.pull_request.user.login }}" \
+            --arg title "${{ github.event.pull_request.title }}" \
+            --arg state "${{ github.event.pull_request.state }}" \
+            --arg created_at "${{ github.event.pull_request.created_at }}" \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            '{
+              repository: $repo,
+              pull_request_number: $pr_num,
+              owner: $owner,
+              branch: $branch,
+              pr_author: $author,
+              pr_title: $title,
+              pr_state: $state,
+              pr_created_at: $created_at,
+              commit_sha: $sha
             }')
           
+          echo "Generated payload:"
+          echo "$payload"
+          
+          response=$(curl -X POST "$API_ENDPOINT/review" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $API_KEY" \
+            -d "$payload")
+          
           # Extract execution_arn from response
-          execution_arn=$(echo $response | jq -r '.execution_arn')
+          execution_arn=$(echo "$response" | jq -r '.execution_arn')
           echo "execution_arn=$execution_arn" >> $GITHUB_OUTPUT
 
   check-review-status:
