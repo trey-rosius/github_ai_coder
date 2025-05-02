@@ -111,7 +111,7 @@ jobs:
               continue
             fi
             
-            status=$(echo "$response" | jq -r '.status')
+            status = $(echo "$response" | jq -r '.body | fromjson | .status')
             
             if [ "$status" = "SUCCEEDED" ]; then
               echo "Review completed successfully"
