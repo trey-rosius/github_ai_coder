@@ -58,7 +58,7 @@ def fetch_pr_changes(repo_name: str, pr_number: int, owner: str) -> List[Dict[st
     """Fetch changes from a pull request with enhanced error handling"""
     try:
         logger.info(f"Fetching PR changes for repo: {owner}/{repo_name}, PR: {pr_number}")
-
+        # we have to be sure that the pr_number is good
         repo = github.get_repo(f"{owner}/{repo_name}")
         pr_number = int(pr_number)
         pr = repo.get_pull(pr_number)
