@@ -66,6 +66,7 @@ jobs:
           
           # Extract execution_arn from response
           execution_arn=$(echo "$response" | jq -r '.execution_arn')
+          echo "Extracted execution_arn: $execution_arn"
           echo "execution_arn=$execution_arn" >> $GITHUB_OUTPUT
 
   check-review-status:
