@@ -44,12 +44,19 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 def handle_review_request() -> Dict[str, Any]:
     """Handle POST /review request"""
     review_request = app.current_event.json_body
-    logger.info(f"json body {review_request}")
+    #logger.info(f"json body {review_request}")
 
     logger.info("Starting PR review", extra={
         "repository": review_request['repository'],
         "pr_number": review_request['pull_request_number'],
-        "owner": review_request['owner']
+        "owner": review_request['owner'],
+        "branch": review_request['branch'],
+        "pr_author": review_request['pr_author'],
+        "pr_title": review_request['pr_title'],
+        "pr_state": review_request['pr_state'],
+        "pr_created_at": review_request['pr_created_at'],
+        "commit_sha": review_request['commit_sha']
+
     })
 
     # Start Step Functions execution
@@ -59,9 +66,15 @@ def handle_review_request() -> Dict[str, Any]:
             'repository': review_request['repository'],
             'pull_request_number': review_request['pull_request_number'],
             'owner': review_request['owner'],
-            'branch': review_request['branch']
+            'branch': review_request['branch'],
+            "pr_author": review_request['pr_author'],
+            "pr_title": review_request['pr_title'],
+            "pr_state": review_request['pr_state'],
+            "pr_created_at": review_request['pr_created_at'],
+            "commit_sha": review_request['commit_sha']
         })
     )
+
 
     metrics.add_metric(name="ReviewStarted", unit="Count", value=1)
 
