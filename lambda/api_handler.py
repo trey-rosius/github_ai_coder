@@ -55,8 +55,7 @@ def handle_review_request() -> Dict[str, Any]:
         "pr_title": review_request['pr_title'],
         "pr_state": review_request['pr_state'],
         "pr_created_at": review_request['pr_created_at'],
-        "pr_merged": review_request['pr_merged'],
-    "commit_sha": review_request['commit_sha']
+        "commit_sha": review_request['commit_sha']
 
     })
 
@@ -72,7 +71,6 @@ def handle_review_request() -> Dict[str, Any]:
             "pr_title": review_request['pr_title'],
             "pr_state": review_request['pr_state'],
             "pr_created_at": review_request['pr_created_at'],
-            "pr_merged": review_request['pr_merged'],
             "commit_sha": review_request['commit_sha']
         })
     )
