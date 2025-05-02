@@ -196,4 +196,4 @@ class GithubAiCoderStack(Stack):
 
         # Output the API key and endpoint
         self.api_endpoint = api.url
-        self.api_key = api_key.key_id 
+        #self.api_key = api_key.key_id
