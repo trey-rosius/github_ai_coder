@@ -60,6 +60,7 @@ def fetch_pr_changes(repo_name: str, pr_number: int, owner: str) -> List[Dict[st
         logger.info(f"Fetching PR changes for repo: {owner}/{repo_name}, PR: {pr_number}")
 
         repo = github.get_repo(f"{owner}/{repo_name}")
+        pr_number = int(pr_number)
         pr = repo.get_pull(pr_number)
         changes = []
 

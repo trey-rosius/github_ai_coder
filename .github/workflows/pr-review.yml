@@ -22,7 +22,7 @@ jobs:
           # Create properly formatted JSON payload
           payload=$(jq -n \
             --arg repo "${{ github.event.repository.name }}" \
-            --arg pr_num "${{ github.event.pull_request.number }}" \
+            --argjson pr_num "${{ github.event.pull_request.number }}" \
             --arg owner "${{ github.event.repository.owner.login }}" \
             --arg branch "${{ github.head_ref }}" \
             --arg author "${{ github.event.pull_request.user.login }}" \
