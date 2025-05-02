@@ -45,10 +45,24 @@ jobs:
           echo "Generated payload:"
           echo "$payload"
           
-          response=$(curl -X POST "$API_ENDPOINT/review" \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: $API_KEY" \
-            -d "$payload")
+          # Add retry logic for the initial request
+          max_attempts=3
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt of $max_attempts"
+            response=$(curl -f -X POST "$API_ENDPOINT/review" \
+              -H "Content-Type: application/json" \
+              -H "x-api-key: $API_KEY" \
+              -d "$payload") && break
+            
+            attempt=$((attempt + 1))
+            sleep 10
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "Failed to trigger review after $max_attempts attempts"
+            exit 1
+          fi
           
           # Extract execution_arn from response
           execution_arn=$(echo "$response" | jq -r '.execution_arn')
@@ -57,6 +71,7 @@ jobs:
   check-review-status:
     needs: trigger-review
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Increased timeout
     steps:
       - name: Check Review Status
         env:
@@ -64,30 +79,54 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
           EXECUTION_ARN: ${{ needs.trigger-review.outputs.execution_arn }}
         run: |
-          # Wait for processing
-          sleep 30
+          # Initial delay based on PR complexity
+          if [[ "${{ github.event.pull_request.additions }}" -gt 100 ]]; then
+            echo "Large PR detected (100+ additions), increasing initial delay"
+            sleep 60
+          else
+            sleep 30
+          fi
           
-          # Check status with retry logic
-          max_retries=5
+          # Adaptive polling logic
+          max_retries=10  # Increased max retries
           retry_count=0
+          last_wait=30  # Initial wait time in seconds
+          max_wait=300  # Maximum wait time between checks
           
           while [ $retry_count -lt $max_retries ]; do
+            echo "Checking status (attempt $((retry_count + 1))/$max_retries)..."
+            
             response=$(curl -s -X GET "$API_ENDPOINT/status/$EXECUTION_ARN" \
               -H "x-api-key: $API_KEY")
+            
+            # Check if response is valid JSON
+            if ! echo "$response" | jq -e . >/dev/null 2>&1; then
+              echo "Invalid JSON response, waiting to retry..."
+              sleep $last_wait
+              retry_count=$((retry_count + 1))
+              last_wait=$((last_wait * 2 < max_wait ? last_wait * 2 : max_wait))
+              continue
+            fi
             
             status=$(echo "$response" | jq -r '.status')
             
             if [ "$status" = "SUCCEEDED" ]; then
+              echo "Review completed successfully"
               echo "$response" | jq .
               exit 0
             elif [ "$status" = "FAILED" ]; then
               echo "Review failed" >&2
               echo "$response" | jq . >&2
               exit 1
+            elif [ "$status" = "IN_PROGRESS" ]; then
+              echo "Review still in progress"
+            else
+              echo "Unknown status: $status"
             fi
             
-            retry_count=$((retry_count+1))
-            sleep 30
+            retry_count=$((retry_count + 1))
+            sleep $last_wait
+            last_wait=$((last_wait * 2 < max_wait ? last_wait * 2 : max_wait))
           done
           
           echo "Timed out waiting for review completion" >&2
