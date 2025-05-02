@@ -44,7 +44,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 def handle_review_request() -> Dict[str, Any]:
     """Handle POST /review request"""
     review_request = app.current_event.json_body
-    logger.info(f"json body {review_request}")
+    #logger.info(f"json body {review_request}")
 
     logger.info("Starting PR review", extra={
         "repository": review_request['repository'],
@@ -56,7 +56,7 @@ def handle_review_request() -> Dict[str, Any]:
         "pr_state": review_request['pr_state'],
         "pr_created_at": review_request['pr_created_at'],
         "pr_merged": review_request['pr_merged'],
-    "commit_sha": review_request['branch']
+    "commit_sha": review_request['commit_sha']
 
     })
 
@@ -73,7 +73,7 @@ def handle_review_request() -> Dict[str, Any]:
             "pr_state": review_request['pr_state'],
             "pr_created_at": review_request['pr_created_at'],
             "pr_merged": review_request['pr_merged'],
-            "commit_sha": review_request['branch']
+            "commit_sha": review_request['commit_sha']
         })
     )
 
