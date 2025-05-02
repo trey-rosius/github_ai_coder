@@ -101,7 +101,9 @@ jobs:
             
             response=$(curl -s -X GET "$API_ENDPOINT/status/$EXECUTION_ARN" \
               -H "x-api-key: $API_KEY")
-            
+          
+            echo "Raw response from API:"
+            echo "$response"            
             # Check if response is valid JSON
             if ! echo "$response" | jq -e . >/dev/null 2>&1; then
               echo "Invalid JSON response, waiting to retry..."
