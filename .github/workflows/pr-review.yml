@@ -50,7 +50,7 @@ jobs:
           attempt=1
           while [ $attempt -le $max_attempts ]; do
             echo "Attempt $attempt of $max_attempts"
-            response=$(curl -f -X POST "$API_ENDPOINT/review" \
+            response=$(curl -s -f -X POST "$API_ENDPOINT/review" \
               -H "Content-Type: application/json" \
               -H "x-api-key: $API_KEY" \
               -d "$payload") && break
@@ -63,6 +63,8 @@ jobs:
             echo "Failed to trigger review after $max_attempts attempts"
             exit 1
           fi
+          echo "Raw response from API:"
+          echo "$response"
           
           # Extract execution_arn from response
           execution_arn=$(echo "$response" | jq -r '.execution_arn')
@@ -83,16 +85,16 @@ jobs:
           # Initial delay based on PR complexity
           if [[ "${{ github.event.pull_request.additions }}" -gt 100 ]]; then
             echo "Large PR detected (100+ additions), increasing initial delay"
-            sleep 60
+            sleep 20
           else
-            sleep 30
+            sleep 10
           fi
           
           # Adaptive polling logic
           max_retries=10  # Increased max retries
           retry_count=0
-          last_wait=30  # Initial wait time in seconds
-          max_wait=300  # Maximum wait time between checks
+          last_wait=20  # Initial wait time in seconds
+          max_wait=50  # Maximum wait time between checks
           
           while [ $retry_count -lt $max_retries ]; do
             echo "Checking status (attempt $((retry_count + 1))/$max_retries)..."
