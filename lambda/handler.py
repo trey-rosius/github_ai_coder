@@ -25,6 +25,9 @@ MAX_TOKENS = 1000
 TEMPERATURE = 0.5
 GITHUB_TOKEN_SECRET_NAME = "dev/github_token"
 
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('GitHubAIReviews')
+
 
 class PRReviewError(Exception):
     """Custom exception for PR review related errors"""
@@ -216,6 +219,7 @@ def generate_review_with_bedrock(changes_data: Any) -> List[Dict[str, Any]]:
         }]
 
 
+@tracer.capture_method()
 def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews_data: Any):
     """Post review comments to GitHub with robust JSON handling"""
     try:
@@ -300,6 +304,8 @@ def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews_dat
         error_msg = f"Unexpected error: {str(e)}"
         logger.error(error_msg, exc_info=True)
         raise PRReviewError(error_msg)
+
+
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
 @tracer.capture_lambda_handler
 @metrics.log_metrics

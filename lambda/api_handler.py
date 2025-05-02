@@ -49,7 +49,15 @@ def handle_review_request() -> Dict[str, Any]:
     logger.info("Starting PR review", extra={
         "repository": review_request['repository'],
         "pr_number": review_request['pull_request_number'],
-        "owner": review_request['owner']
+        "owner": review_request['owner'],
+        "branch": review_request['branch'],
+        "pr_author": review_request['pr_author'],
+        "pr_title": review_request['pr_title'],
+        "pr_state": review_request['pr_state'],
+        "pr_created_at": review_request['pr_created_at'],
+        "pr_merged": review_request['pr_merged'],
+    "commit_sha": review_request['branch']
+
     })
 
     # Start Step Functions execution
@@ -59,9 +67,16 @@ def handle_review_request() -> Dict[str, Any]:
             'repository': review_request['repository'],
             'pull_request_number': review_request['pull_request_number'],
             'owner': review_request['owner'],
-            'branch': review_request['branch']
+            'branch': review_request['branch'],
+            "pr_author": review_request['pr_author'],
+            "pr_title": review_request['pr_title'],
+            "pr_state": review_request['pr_state'],
+            "pr_created_at": review_request['pr_created_at'],
+            "pr_merged": review_request['pr_merged'],
+            "commit_sha": review_request['branch']
         })
     )
+
 
     metrics.add_metric(name="ReviewStarted", unit="Count", value=1)
 

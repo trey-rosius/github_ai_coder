@@ -26,7 +26,13 @@ jobs:
               "repository": "${{ github.event.repository.name }}",
               "pull_request_number": ${{ github.event.pull_request.number }},
               "owner": "${{ github.event.repository.owner.login }}",
-              "branch": "${{ github.head_ref }}"
+              "branch": "${{ github.head_ref }}",
+              "pr_author": "${{ github.event.pull_request.user.login }}",
+              "pr_title": "${{ toJson(github.event.pull_request.title) }}",
+              "pr_state": "${{ github.event.pull_request.state }}",
+              "pr_created_at": "${{ github.event.pull_request.created_at }}",
+              "pr_merged": ${{ github.event.pull_request.merged || false }},
+              "commit_sha": "${{ github.event.pull_request.head.sha }}"
             }')
           
           # Extract execution_arn from response
@@ -43,9 +49,31 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
           EXECUTION_ARN: ${{ needs.trigger-review.outputs.execution_arn }}
         run: |
-          # Wait for 30 seconds to allow the review to process
+          # Wait for processing
           sleep 30
           
-          # Check the status
-          curl -X GET $API_ENDPOINT/status/$EXECUTION_ARN \
-            -H "x-api-key: $API_KEY" 
+          # Check status with retry logic
+          max_retries=3
+          retry_count=0
+          
+          while [ $retry_count -lt $max_retries ]; do
+            response=$(curl -s -X GET "$API_ENDPOINT/status/$EXECUTION_ARN" \
+              -H "x-api-key: $API_KEY")
+            
+            status=$(echo "$response" | jq -r '.status')
+            
+            if [ "$status" = "SUCCEEDED" ]; then
+              echo "$response" | jq .
+              exit 0
+            elif [ "$status" = "FAILED" ]; then
+              echo "Review failed" >&2
+              echo "$response" | jq . >&2
+              exit 1
+            fi
+            
+            retry_count=$((retry_count+1))
+            sleep 10
+          done
+          
+          echo "Timed out waiting for review completion" >&2
+          exit 1
