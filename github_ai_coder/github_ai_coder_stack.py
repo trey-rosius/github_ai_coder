@@ -160,7 +160,7 @@ class GithubAiCoderStack(Stack):
         api_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["states:StartExecution", "states:DescribeExecution"],
-                resources=[workflow.state_machine_arn]
+                resources=["*"]
             )
         )
 
