@@ -75,6 +75,8 @@ def handle_review_request() -> Dict[str, Any]:
         })
     )
 
+    logger.info(f"start step function response {response}")
+
 
     metrics.add_metric(name="ReviewStarted", unit="Count", value=1)
 
