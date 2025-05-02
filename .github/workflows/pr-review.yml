@@ -31,7 +31,7 @@ jobs:
               "pr_title": "${{ toJson(github.event.pull_request.title) }}",
               "pr_state": "${{ github.event.pull_request.state }}",
               "pr_created_at": "${{ github.event.pull_request.created_at }}",
-              "pr_merged": ${{ github.event.pull_request.merged || false }},
+              "pr_merged": ${{ github.event.pull_request.merged || 'false' }},
               "commit_sha": "${{ github.event.pull_request.head.sha }}"
             }')
           
