@@ -24,12 +24,9 @@
         "Payload": {
           "action": "fetch_changes",
           "repository": "{% $states.input.repository %}",
-          "pull_request_number.$": "{% $states.input.pull_request_number %}",
-          "owner.$": "{% $states.input.owner %}"
+          "pull_request_number": "{% $states.input.pull_request_number %}",
+          "owner": "{% $states.input.owner %}"
         }
-      },
-      "Output": {
-        "changes": "{% $states.result %}"
       }
     },
     "GenerateReview": {
@@ -54,7 +51,7 @@
         "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}",
         "Payload": {
           "action": "generate_review",
-          "changes": "{% $states.input.changes %}"
+          "changes": "{% $states.input.Payload.body %}"
         }
       }
     },
@@ -79,7 +76,7 @@
       "Arguments": {
         "Payload": {
           "action": "post_comments",
-          "review": "{% $states.input.reviews %}",
+          "review": "{% $states.input.Payload.body %}",
           "repository": "{% $states.context.Execution.Input.repository %}",
           "pull_request_number": "{% $states.context.Execution.Input.pull_request_number %}",
           "owner": "{% $states.context.Execution.Input.owner %}"

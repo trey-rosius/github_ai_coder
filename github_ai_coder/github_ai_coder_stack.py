@@ -4,6 +4,7 @@ from aws_cdk import (
     Stack,
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as tasks,
+    aws_secretsmanager as secretsmanager,
     aws_lambda as _lambda,
     aws_iam as iam,
     aws_apigateway as apigateway,
@@ -22,6 +23,13 @@ class GithubAiCoderStack(Stack):
             assumed_by=iam.ServicePrincipal("states.amazonaws.com")
         )
 
+        # Step 1: Define the secret (if it doesn't already exist)
+        secret = secretsmanager.Secret.from_secret_name_v2(
+            self,
+            "ExistingStripeSecret",
+            secret_name="dev/github_token",  # Name of the existing secret
+        )
+
         # Add permissions for Bedrock
         sfn_role.add_to_policy(
             iam.PolicyStatement(
@@ -31,12 +39,23 @@ class GithubAiCoderStack(Stack):
                 resources=["*"]
             )
         )
+        sfn_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "lambda:InvokeFunction"
+                ],
+                resources=[
+                    "*"
+                ]
+            )
+        )
 
         # Create Lambda function for PR review
         pr_review_lambda = PythonFunction(
             self, "PRReviewFunction",
             entry="lambda",
             index="handler.py",
+            handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
             environment={
 
@@ -44,7 +63,19 @@ class GithubAiCoderStack(Stack):
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
                 "LOG_LEVEL": "INFO"
             },
-            timeout=Duration.seconds(60)
+            timeout=Duration.minutes(10)
+        )
+
+        secret.grant_read(pr_review_lambda)
+        pr_review_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                ],
+                resources=["*"],
+                # Grant access to all Bedrock models
+            )
         )
         # Load the ASL definition from the JSON file
         with open("./state_machine/github_review_workflow.asl.json", "r") as file:
@@ -113,15 +144,17 @@ class GithubAiCoderStack(Stack):
             self, "ApiHandler",
             entry="lambda",
             index="api_handler.py",
+            handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
             environment={
-                "STATE_MACHINE_ARN": workflow.state_machine_arn,
                 "POWERTOOLS_SERVICE_NAME": "pr-reviewer-api",
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
                 "LOG_LEVEL": "INFO"
             },
             timeout=Duration.seconds(30)
         )
+
+        api_lambda.add_environment("STATE_MACHINE_ARN",workflow.state_machine_arn)
 
         # Grant permissions to invoke Step Functions
         api_lambda.add_to_role_policy(
