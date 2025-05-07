@@ -75,6 +75,8 @@ def handle_review_request() -> Dict[str, Any]:
         })
     )
 
+    logger.info(f"start step function response {response}")
+
 
     metrics.add_metric(name="ReviewStarted", unit="Count", value=1)
 
@@ -95,6 +97,7 @@ def handle_status_request(execution_arn: str) -> Dict[str, Any]:
     logger.info("Checking review status", extra={"execution_arn": execution_arn})
 
     response = sfn_client.describe_execution(executionArn=execution_arn)
+    logger.info(f"review status response {response}")
 
     metrics.add_metric(name="StatusChecked", unit="Count", value=1)
 

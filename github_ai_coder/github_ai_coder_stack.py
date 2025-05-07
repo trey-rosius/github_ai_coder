@@ -160,7 +160,7 @@ class GithubAiCoderStack(Stack):
         api_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["states:StartExecution", "states:DescribeExecution"],
-                resources=[workflow.state_machine_arn]
+                resources=["*"]
             )
         )
 
@@ -196,4 +196,4 @@ class GithubAiCoderStack(Stack):
 
         # Output the API key and endpoint
         self.api_endpoint = api.url
-        self.api_key = api_key.key_id 
+        #self.api_key = api_key.key_id
