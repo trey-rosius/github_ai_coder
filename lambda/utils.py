@@ -162,6 +162,7 @@ def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: An
     github, _ = initialize_clients()
     repo = github.get_repo(f"{owner}/{repo_name}")
     pr = repo.get_pull(pr_number)
+    logger.info(f"reviews is {reviews}")
     success, fail = 0, 0
     for r in reviews:
         if 'error' in r or not r.get('review'):
