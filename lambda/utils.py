@@ -18,7 +18,7 @@ client = session.client(service_name="secretsmanager", region_name='us-east-1')
 
 
 class PRReviewError(Exception):
-    """Custom exception for PR review errors"""
+    """Custom exception for PR review errors  """
 
 
 @tracer.capture_method()
@@ -163,10 +163,16 @@ def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: An
     repo = github.get_repo(f"{owner}/{repo_name}")
     pr = repo.get_pull(pr_number)
     logger.info(f"reviews is {reviews}")
-    raw_response = reviews.get('reviews')
-    reviews_payload = json.loads(raw_response)
+    parsed = json.loads(reviews)
+    if isinstance(parsed, dict) and "reviews" in parsed:
+        reviews_list = parsed["reviews"]
+    elif isinstance(parsed, list):
+        reviews_list = parsed
+    else:
+        logger.error(f"Unexpected structure for reviews: {parsed!r}")
+        raise PRReviewError("Invalid reviews payload")
     success, fail = 0, 0
-    for r in reviews_payload:
+    for r in reviews_list:
         if 'error' in r or not r.get('review'):
             fail += 1
             continue
