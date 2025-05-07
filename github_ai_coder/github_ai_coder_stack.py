@@ -1,5 +1,4 @@
-import json
-
+import aws_cdk as cdk
 from aws_cdk import (
     Stack,
     aws_stepfunctions as sfn,
@@ -14,91 +13,79 @@ from aws_cdk.aws_lambda_python_alpha import PythonFunction
 from constructs import Construct
 
 class GithubAiCoderStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
+        super().__init__(scope, id, **kwargs)
 
-        # Create IAM role for Step Functions
+        # 1) Role for Step Functions
         sfn_role = iam.Role(
             self, "PRReviewerStepFunctionRole",
-            assumed_by=iam.ServicePrincipal("states.amazonaws.com")
+            assumed_by=iam.ServicePrincipal("states.amazonaws.com"),
+            description="Allows Step Functions to invoke Bedrock and Lambda"
         )
 
-        # Step 1: Define the secret (if it doesn't already exist)
-        secret = secretsmanager.Secret.from_secret_name_v2(
-            self,
-            "ExistingStripeSecret",
-            secret_name="dev/github_token",  # Name of the existing secret
+        # Bedrock permissions (no change; if you know the ARNs you can lock down 'resources' further)
+        sfn_role.add_to_policy(iam.PolicyStatement(
+            actions=["bedrock:InvokeModel"],
+            resources=["*"],
+        ))
+
+        # Only allow state machine to invoke our PR-review Lambda:
+        # we'll create that function next, so we’ll attach this policy after creation.
+
+        # 2) Import existing GitHub token secret
+        gh_token = secretsmanager.Secret.from_secret_name_v2(
+            self, "GitHubTokenSecret",
+            secret_name="dev/github_token",
         )
 
-        # Add permissions for Bedrock
-        sfn_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "bedrock:InvokeModel",
-                ],
-                resources=["*"]
-            )
-        )
-        sfn_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "lambda:InvokeFunction"
-                ],
-                resources=[
-                    "*"
-                ]
-            )
-        )
-
-        # Create Lambda function for PR review
-        pr_review_lambda = PythonFunction(
+        # 3) PR-review Lambda
+        pr_review_fn = PythonFunction(
             self, "PRReviewFunction",
-            entry="lambda",
+            entry="lambda/",             # your code folder
             index="handler.py",
             handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
+            timeout=Duration.minutes(10),
             environment={
-
                 "POWERTOOLS_SERVICE_NAME": "pr-reviewer",
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
-                "LOG_LEVEL": "INFO"
+                "LOG_LEVEL": "INFO",
             },
-            timeout=Duration.minutes(10)
         )
 
-        secret.grant_read(pr_review_lambda)
-        pr_review_lambda.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                ],
-                resources=["*"],
-                # Grant access to all Bedrock models
-            )
-        )
-        # Load the ASL definition from the JSON file
-        with open("./state_machine/github_review_workflow.asl.json", "r") as file:
-            state_machine_definition = json.load(file)
+        # Grant it read access to the GitHub token
+        gh_token.grant_read(pr_review_fn)
 
-        # Create Step Functions workflow
+        # Allow the Lambda to call Bedrock
+        pr_review_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=[
+                "bedrock:InvokeModel",
+                "bedrock:InvokeModelWithResponseStream",
+            ],
+            resources=["*"],
+        ))
+
+        # Now let Step Functions invoke the PR-review Lambda (tighten resource to this function only)
+        sfn_role.add_to_policy(iam.PolicyStatement(
+            actions=["lambda:InvokeFunction"],
+            resources=[pr_review_fn.function_arn],
+        ))
+
+        # 4) State Machine
+        # Load directly from file (no need to `open`/`json.load` yourself)
+        definition = sfn.DefinitionBody.from_file("state_machine/github_review_workflow.asl.json")
+
         workflow = sfn.StateMachine(
             self, "PRReviewerWorkflow",
-            definition_body=sfn.DefinitionBody.from_string(
-                json.dumps(state_machine_definition)
-            ),
-
+            definition_body=definition,
             definition_substitutions={
-
-                "INVOKE_LAMBDA_FUNCTION_ARN": pr_review_lambda.function_arn,
+                "INVOKE_LAMBDA_FUNCTION_ARN": pr_review_fn.function_arn,
             },
-            # Use definition_body
+            role=sfn_role,
             state_machine_type=sfn.StateMachineType.STANDARD,
-
-            role=sfn_role
         )
 
-        # Create API Gateway
+        # 5) API Gateway + Usage Plan
         api = apigateway.RestApi(
             self, "PRReviewerApi",
             rest_api_name="PR Reviewer API",
@@ -106,94 +93,71 @@ class GithubAiCoderStack(Stack):
             deploy_options=apigateway.StageOptions(
                 stage_name="prod",
                 throttling_rate_limit=100,
-                throttling_burst_limit=50
-            )
+                throttling_burst_limit=50,
+            ),
         )
 
-        # Create API key and usage plan
-        api_key = apigateway.ApiKey(
-            self, "PRReviewerApiKey",
+        api_key = api.add_api_key("PRReviewerApiKey",
             api_key_name="PR-Reviewer-Key",
             description="API key for PR Reviewer service"
         )
 
-        usage_plan = apigateway.UsagePlan(
-            self, "PRReviewerUsagePlan",
+        usage_plan = api.add_usage_plan("PRReviewerUsagePlan",
             name="PR-Reviewer-Plan",
-            description="Usage plan for PR Reviewer API",
-            api_stages=[
-                apigateway.UsagePlanPerApiStage(
-                    api=api,
-                    stage=api.deployment_stage
-                )
-            ],
-            throttle=apigateway.ThrottleSettings(
-                rate_limit=100,
-                burst_limit=50
-            ),
-            quota=apigateway.QuotaSettings(
-                limit=1000,
-                period=apigateway.Period.MONTH
-            )
+            throttle=apigateway.ThrottleSettings(rate_limit=100, burst_limit=50),
+            quota=apigateway.QuotaSettings(limit=1000, period=apigateway.Period.MONTH),
         )
-
         usage_plan.add_api_key(api_key)
+        usage_plan.add_api_stage(api=api, stage=api.deployment_stage)
 
-        # Create Lambda function for API Gateway integration
-        api_lambda = PythonFunction(
+        # 6) Lambda for API backing
+        api_handler = PythonFunction(
             self, "ApiHandler",
-            entry="lambda",
+            entry="lambda/",            # same folder or separate?
             index="api_handler.py",
             handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
+            timeout=Duration.seconds(30),
             environment={
                 "POWERTOOLS_SERVICE_NAME": "pr-reviewer-api",
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
-                "LOG_LEVEL": "INFO"
+                "LOG_LEVEL": "INFO",
+                "STATE_MACHINE_ARN": workflow.state_machine_arn,
             },
-            timeout=Duration.seconds(30)
         )
 
-        api_lambda.add_environment("STATE_MACHINE_ARN",workflow.state_machine_arn)
+        # Grant it right to start & describe our state machine only
+        workflow.grant_start_execution(api_handler)
+        api_handler.add_to_role_policy(iam.PolicyStatement(
+            actions=["states:DescribeExecution"],
+            resources=["*"],
+        ))
 
-        # Grant permissions to invoke Step Functions
-        api_lambda.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=["states:StartExecution", "states:DescribeExecution"],
-                resources=["*"]
-            )
-        )
+        # X-Ray + CloudWatch metrics
+        api_handler.add_to_role_policy(iam.PolicyStatement(
+            actions=[
+                "xray:PutTraceSegments",
+                "xray:PutTelemetryRecords",
+                "cloudwatch:PutMetricData",
+            ],
+            resources=["*"],
+        ))
 
-        # Add X-Ray and CloudWatch permissions
-        api_lambda.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "xray:PutTraceSegments",
-                    "xray:PutTelemetryRecords",
-                    "cloudwatch:PutMetricData"
-                ],
-                resources=["*"]
-            )
-        )
-
-        # Create API Gateway resources and methods
-        reviews = api.root.add_resource("review")
-        status = api.root.add_resource("status").add_resource("{execution_arn}")
-
-        # POST /review
-        reviews.add_method(
+        # 7) Wire up REST endpoints
+        review = api.root.add_resource("review")
+        review.add_method(
             "POST",
-            apigateway.LambdaIntegration(api_lambda),
-            api_key_required=True
+            apigateway.LambdaIntegration(api_handler),
+            api_key_required=True,
         )
 
-        # GET /status/{execution_arn}
+        status = api.root.add_resource("status").add_resource("{sfnExecutionArn}")
         status.add_method(
             "GET",
-            apigateway.LambdaIntegration(api_lambda),
-            api_key_required=True
+            apigateway.LambdaIntegration(api_handler),
+            api_key_required=True,
         )
 
-        # Output the API key and endpoint
-        self.api_endpoint = api.url
-        #self.api_key = api_key.key_id
+        # 8) Exports (optional)
+        cdk.CfnOutput(self, "ApiUrl", value=api.url)
+        cdk.CfnOutput(self, "ApiKey", value=api_key.key_id)
