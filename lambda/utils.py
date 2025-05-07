@@ -158,7 +158,7 @@ def generate_review_with_bedrock(changes: List[Dict[str, Any]]) -> List[Dict[str
 
 @tracer.capture_method()
 def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: Any) -> Dict[str, int]:
-    """Iterate your reviews, post comments via PyGithub, tally successes/failures."""
+    """Iterate your reviews, post comments with PyGithub, tally successes/failures."""
     github, _ = initialize_clients()
     repo = github.get_repo(f"{owner}/{repo_name}")
     pr = repo.get_pull(pr_number)
