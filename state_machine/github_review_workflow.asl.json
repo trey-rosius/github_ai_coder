@@ -76,7 +76,7 @@
       "Arguments": {
         "Payload": {
           "action": "post_comments",
-          "review": "{% $states.input.Payload.body %}",
+          "reviews": "{% $states.input.Payload.body %}",
           "repository": "{% $states.context.Execution.Input.repository %}",
           "pull_request_number": "{% $states.context.Execution.Input.pull_request_number %}",
           "owner": "{% $states.context.Execution.Input.owner %}"
