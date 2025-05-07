@@ -74,7 +74,8 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
                 repo_name=event["repository"],
                 pr_number=int(event["pull_request_number"]),
                 owner=event["owner"],
-                reviews_data=event["reviews"]
+                reviews=event["reviews"]
+
             )
             return _response(200, {"result": result})
 
