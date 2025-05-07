@@ -11,6 +11,7 @@ logger = Logger(service="pr-reviewer")
 tracer = Tracer(service="pr-reviewer")
 metrics = Metrics(namespace="PRReviewer")
 
+
 @logger.inject_lambda_context(correlation_id_path=None)
 @tracer.capture_lambda_handler
 @metrics.log_metrics
@@ -20,6 +21,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
     and error handling.
     Supported actions: fetch_changes, generate_review, post_comments
     """
+
     def _response(status_code: int, payload: dict) -> dict:
         metrics.add_metric(name="Invocation", unit="Count", value=1)
         return {"statusCode": status_code, "body": json.dumps(payload)}
@@ -48,13 +50,17 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
 
         elif action == "generate_review":
             logger.info(f"changes are {event}")
-            changes = event.get("changes")
-            if not isinstance(changes, list) or not changes:
+            # Parse the JSON string in the 'changes' field
+            changes_data = json.loads(event['changes'])
+            changes_list = changes_data['changes']
+
+            logger.info(f"changes list {changes_list}")
+            if not isinstance(changes_list, list) or not changes_list:
                 msg = "'changes' must be a non-empty list for generate_review"
                 logger.error(msg)
                 return _response(400, {"error": msg})
 
-            reviews = generate_review_with_bedrock(changes)
+            reviews = generate_review_with_bedrock(changes_list)
             return _response(200, {"reviews": reviews})
 
         elif action == "post_comments":
