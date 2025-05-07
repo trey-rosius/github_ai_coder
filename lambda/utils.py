@@ -163,8 +163,9 @@ def post_review_comments(repo_name: str, pr_number: int, owner: str, reviews: An
     repo = github.get_repo(f"{owner}/{repo_name}")
     pr = repo.get_pull(pr_number)
     logger.info(f"reviews is {reviews}")
+    reviews_payload = json.loads(reviews['reviews'])
     success, fail = 0, 0
-    for r in reviews:
+    for r in reviews_payload:
         if 'error' in r or not r.get('review'):
             fail += 1
             continue
