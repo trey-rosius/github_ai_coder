@@ -56,7 +56,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             changes_list = changes_data['changes']
 
             logger.info(f"changes list {changes_list}")
-            if not isinstance(changes_list, list) or not changes_list:
+            if not changes_list:
                 msg = "'changes' must be a non-empty list for generate_review"
                 logger.error(msg)
                 return _response(400, {"error": msg})
