@@ -52,7 +52,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         elif action == "generate_review":
             logger.info(f"changes are {event}")
             # Parse the JSON string in the 'changes' field
-            #changes_data = json.loads(event['changes'])
+            changes_data = json.loads(event['changes'])
             changes_list = event['changes']
 
             logger.info(f"changes list {changes_list}")
