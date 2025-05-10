@@ -75,6 +75,7 @@ def fetch_pr_changes(
         repo_name: str,
         pr_number: int,
         owner: str,
+       as_dict: bool = False,
 ) -> List[PullRequestFileChange]:
     """
     Load a pull request and return a *validated* list of file-level changes.
@@ -97,7 +98,8 @@ def fetch_pr_changes(
     changes: List[PullRequestFileChange] = []
     for f in pr.get_files():
         try:
-            changes.append(PullRequestFileChange.from_github_file(f))
+            model = PullRequestFileChange.from_github_file(f)
+            changes.append(model.model_dump(by_alias=True) if as_dict else model)
         except ValidationError as ve:
             raise PRReviewError(
                 f"Pydantic validation failed for file '{getattr(f, 'filename', 'unknown')}': {ve}"

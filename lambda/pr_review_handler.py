@@ -40,11 +40,12 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
                 logger.error(msg)
                 return _response(400, {"error": msg})
 
-            changes = fetch_pr_changes(
+            changes = json.dumps(fetch_pr_changes(
                 repo_name=event["repository"],
                 pr_number=int(event["pull_request_number"]),
-                owner=event["owner"]
-            )
+                owner=event["owner"],
+                as_dict=True
+            ))
             return _response(200, {"changes": changes})
 
 
