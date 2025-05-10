@@ -52,11 +52,11 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         elif action == "generate_review":
             logger.info(f"changes are {event}")
             # Parse the JSON string in the 'changes' field
-            changes_data = json.loads(event['changes'])
-            changes_list = changes_data['changes']
+            #changes_data = json.loads(event['changes'])
+            changes_list = event['changes']
 
             logger.info(f"changes list {changes_list}")
-            if not changes_list:
+            if not isinstance(changes_list, list) or not changes_list:
                 msg = "'changes' must be a non-empty list for generate_review"
                 logger.error(msg)
                 return _response(400, {"error": msg})
