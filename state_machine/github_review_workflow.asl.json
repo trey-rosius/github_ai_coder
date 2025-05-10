@@ -20,7 +20,7 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "QueryLanguage": "JSONata",
       "Arguments": {
-        "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}",
+        "FunctionName": "${INVOKE_PR_REVIEW_FUNCTION_ARN}",
         "Payload": {
           "action": "fetch_changes",
           "repository": "{% $states.input.repository %}",
@@ -48,7 +48,7 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "QueryLanguage": "JSONata",
       "Arguments": {
-        "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}",
+        "FunctionName": "${INVOKE_PR_REVIEW_FUNCTION_ARN}",
         "Payload": {
           "action": "generate_review",
           "changes": "{% $states.input.Payload.body %}"
@@ -56,7 +56,6 @@
       }
     },
     "PostReviewComments": {
-      "End": true,
       "Retry": [
         {
           "ErrorEquals": [
@@ -81,7 +80,46 @@
           "pull_request_number": "{% $states.context.Execution.Input.pull_request_number %}",
           "owner": "{% $states.context.Execution.Input.owner %}"
         },
-        "FunctionName": "${INVOKE_LAMBDA_FUNCTION_ARN}"
+        "FunctionName": "${INVOKE_PR_REVIEW_FUNCTION_ARN}"
+      },
+      "Next": "Pass"
+    },
+    "Pass": {
+      "Type": "Pass",
+      "Next": "Notify Slack",
+      "QueryLanguage": "JSONata",
+      "Output": {
+        "result": "{% $parse($states.input.Payload.body).result %}"
+
+      }
+    },
+    "Notify Slack": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "End": true,
+      "QueryLanguage": "JSONata",
+      "Arguments": {
+        "Payload": {
+           "repository": "{% $states.context.Execution.Input.repository %}",
+           "pull_request_number": "{% $states.context.Execution.Input.pull_request_number %}",
+            "owner": "{% $states.context.Execution.Input.owner %}",
+          "result": "{% $states.input.result %}"
+        },
+        "FunctionName": "${INVOKE_NOTIFY_SLACK_FUNCTION_ARN}"
       }
     }
   }
