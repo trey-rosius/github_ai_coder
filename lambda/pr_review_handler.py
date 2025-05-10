@@ -53,7 +53,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             logger.info(f"changes are {event}")
             # Parse the JSON string in the 'changes' field
             changes_data = json.loads(event['changes'])
-            changes_list = event['changes']
+            changes_list = changes_data['changes']
 
             logger.info(f"changes list {changes_list}")
             if not isinstance(changes_list, list) or not changes_list:
