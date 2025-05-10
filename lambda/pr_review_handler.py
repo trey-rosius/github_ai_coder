@@ -43,7 +43,8 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             changes = fetch_pr_changes(
                 repo_name=event["repository"],
                 pr_number=int(event["pull_request_number"]),
-                owner=event["owner"]
+                owner=event["owner"],
+                as_dict=True
             )
             return _response(200, {"changes": changes})
 
@@ -54,7 +55,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             changes_data = json.loads(event['changes'])
             changes_list = changes_data['changes']
 
-            logger.info(f"changes list {changes_list}")
+            logger.info(f"changes list is  {changes_list}")
             if not isinstance(changes_list, list) or not changes_list:
                 msg = "'changes' must be a non-empty list for generate_review"
                 logger.error(msg)

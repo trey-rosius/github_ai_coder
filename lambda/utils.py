@@ -15,6 +15,46 @@ MAX_TOKENS = 1000
 TEMPERATURE = 0.5
 session = boto3.session.Session()
 client = session.client(service_name="secretsmanager", region_name='us-east-1')
+from typing import List, Optional
+from pydantic import BaseModel, Field, ValidationError
+
+
+# --- 1. File-level schema ---------------------------------------------------- #
+class PullRequestFileChange(BaseModel):
+    """
+    Subset of the GitHub PR 'files' schema, mapped to PyGithub.PullRequestFile
+    https://docs.github.com/en/rest/pulls/pulls#list-pull-requests-files
+    """
+    filename: str
+    status: str  # e.g. "added", "modified", "removed", …
+    additions: int
+    deletions: int
+    changes: int  # additions + deletions
+    patch: Optional[str] = None  # unified diff; omitted on binaries
+
+    # Extra metadata you may find useful later
+    sha: Optional[str] = None
+    blob_url: Optional[str] = Field(None, alias="blob_url")
+    raw_url: Optional[str] = Field(None, alias="raw_url")
+    contents_url: Optional[str] = None
+    previous_filename: Optional[str] = None
+
+    @classmethod
+    def from_github_file(cls, gf: "PullRequestFile"):  # type: ignore
+        """Convenience helper to build the model from a PyGithub object."""
+        return cls(
+            filename=gf.filename,
+            status=gf.status,
+            additions=gf.additions,
+            deletions=gf.deletions,
+            changes=gf.changes,
+            patch=getattr(gf, "patch", None),
+            sha=getattr(gf, "sha", None),
+            blob_url=getattr(gf, "blob_url", None),
+            raw_url=getattr(gf, "raw_url", None),
+            contents_url=getattr(gf, "contents_url", None),
+            previous_filename=getattr(gf, "previous_filename", None),
+        )
 
 
 class PRReviewError(Exception):
@@ -31,26 +71,40 @@ def initialize_clients() -> tuple:
 
 
 @tracer.capture_method()
-def fetch_pr_changes(repo_name: str, pr_number: int, owner: str) -> List[Dict[str, Any]]:
-    """Load the PR, iterate its files, and return a list of change dicts"""
+def fetch_pr_changes(
+        repo_name: str,
+        pr_number: int,
+        owner: str,
+       as_dict: bool = False,
+) -> List[PullRequestFileChange]:
+    """
+    Load a pull request and return a *validated* list of file-level changes.
+
+    Raises
+    ------
+    PRReviewError
+        If GitHub or data-validation errors occur.
+    """
     github, _ = initialize_clients()
+
+    # Grab the PR ------------------------------------------------------------- #
     try:
         repo = github.get_repo(f"{owner}/{repo_name}")
         pr = repo.get_pull(pr_number)
     except GithubException as e:
-        raise PRReviewError(f"GitHub error: {e}")
-    changes = []
+        raise PRReviewError(f"GitHub error: {e}") from e
+
+    # Build & validate models ------------------------------------------------- #
+    changes: List[PullRequestFileChange] = []
     for f in pr.get_files():
-        d = dict(
-            filename=f.filename,
-            status=f.status,
-            additions=f.additions,
-            deletions=f.deletions,
-            changes=f.changes,
-        )
-        if f.patch:
-            d['patch'] = f.patch
-        changes.append(d)
+        try:
+            model = PullRequestFileChange.from_github_file(f)
+            changes.append(model.model_dump(by_alias=True) if as_dict else model)
+        except ValidationError as ve:
+            raise PRReviewError(
+                f"Pydantic validation failed for file '{getattr(f, 'filename', 'unknown')}': {ve}"
+            ) from ve
+
     return changes
 
 
@@ -186,7 +240,7 @@ def get_github_token() -> str:
     Fetch Stripe secret key from AWS Secrets Manager.
     Adjust the SecretId and region name based on your setup.
     """
-    secret_name = "dev/github_token"  # Replace with your actual secret name for Stripe
+    secret_name = "dev/github_token"  # Replace with your actual secret name for Github
     region_name = "us-east-1"  # Replace with your secrets region
 
     # Create a session and Secrets Manager client
@@ -196,7 +250,7 @@ def get_github_token() -> str:
         response = client.get_secret_value(SecretId=secret_name)
         secret_string = response[
             "SecretString"
-        ]  # e.g., '{"STRIPE_SECRET_KEY": "sk_test_123..."}'
+        ]
         secret_dict = json.loads(secret_string)
 
         # Adjust the key used here to match your secret's JSON structure

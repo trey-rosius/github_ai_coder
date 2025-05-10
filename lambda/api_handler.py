@@ -20,13 +20,6 @@ metrics = Metrics()
 app = APIGatewayRestResolver()
 
 state_machine_arn = os.environ.get("STATE_MACHINE_ARN")
-# Define input validation schemas
-class ReviewRequest(BaseModel):
-    repository: str = Field(..., description="GitHub repository name")
-    pull_request_number: int = Field(..., description="Pull request number", gt=0)
-    owner: str = Field(..., description="Repository owner")
-    branch: str | None = Field(None, description="Github Branch name")
-
 
 # Initialize AWS clients
 sfn_client = boto3.client('stepfunctions')
@@ -44,7 +37,6 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 def handle_review_request() -> Dict[str, Any]:
     """Handle POST /review request"""
     review_request = app.current_event.json_body
-    #logger.info(f"json body {review_request}")
 
     logger.info("Starting PR review", extra={
         "repository": review_request['repository'],
@@ -76,7 +68,6 @@ def handle_review_request() -> Dict[str, Any]:
     )
 
     logger.info(f"start step function response {response}")
-
 
     metrics.add_metric(name="ReviewStarted", unit="Count", value=1)
 

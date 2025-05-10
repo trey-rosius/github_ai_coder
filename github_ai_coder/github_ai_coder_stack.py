@@ -23,14 +23,15 @@ class GithubAiCoderStack(Stack):
             description="Allows Step Functions to invoke Bedrock and Lambda"
         )
 
+
+        '''
         # Bedrock permissions (no change; if you know the ARNs you can lock down 'resources' further)
         sfn_role.add_to_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel"],
             resources=["*"],
-        ))
-
-        # Only allow state machine to invoke our PR-review Lambda:
-        # we'll create that function next, so we’ll attach this policy after creation.
+        ))  
+        
+        '''
 
         # 2) Import existing GitHub token secret
         gh_token = secretsmanager.Secret.from_secret_name_v2(
@@ -42,7 +43,7 @@ class GithubAiCoderStack(Stack):
         pr_review_fn = PythonFunction(
             self, "PRReviewFunction",
             entry="lambda/",             # your code folder
-            index="handler.py",
+            index="pr_review_handler.py",
             handler="lambda_handler",
             runtime=_lambda.Runtime.PYTHON_3_11,
             timeout=Duration.minutes(10),
