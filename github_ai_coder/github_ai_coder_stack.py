@@ -65,9 +65,8 @@ class GithubAiCoderStack(Stack):
             environment={
                 "POWERTOOLS_SERVICE_NAME": "pr-reviewer",
                 "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
-                "LOG_LEVEL": "INFO",
-                "SLACK_WEBHOOK_URL":"https://hooks.slack.com/services/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"
-            },
+                "LOG_LEVEL": "INFO"
+                  },
         )
 
         # Grant it read access to the GitHub token

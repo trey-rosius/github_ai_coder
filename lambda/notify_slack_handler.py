@@ -6,6 +6,8 @@ import urllib.request
 from typing import Dict, Any
 from aws_lambda_powertools import Logger, Tracer
 
+from utils import get_slack_webhook, PRReviewError
+
 logger = Logger()
 tracer = Tracer()
 
@@ -14,10 +16,13 @@ tracer = Tracer()
 #   SLACK_WEBHOOK_URL – Incoming-webhook URL or Secrets Manager reference
 #   GITHUB_URL_BASE  – Optional. Defaults to https://github.com
 # ──────────────────────────────────────────────────────────────────────────────
-SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
+
 
 GH_BASE = os.getenv("GITHUB_URL_BASE", "https://github.com")
 
+slack_webhook = get_slack_webhook()
+if not slack_webhook:
+    raise PRReviewError("No slack webhook found")
 
 @tracer.capture_method
 def _format_slack_message(payload: Dict[str, Any]) -> str:
@@ -53,7 +58,7 @@ def _format_slack_message(payload: Dict[str, Any]) -> str:
 @tracer.capture_method
 def _post_to_slack(message_json: str) -> None:
     req = urllib.request.Request(
-        url=SLACK_WEBHOOK_URL,
+        url=slack_webhook,
         data=message_json.encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
