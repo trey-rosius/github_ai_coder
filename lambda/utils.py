@@ -278,7 +278,7 @@ def get_slack_webhook() -> str:
         secret_dict = json.loads(secret_string)
 
         # Adjust the key used here to match your secret's JSON structure
-        return secret_dict.get("SLACK_WEBHOOK", "")
+        return secret_dict.get("SLACK_WEBHOOK_URL", "")
     except Exception as e:
         print(f"Error retrieving slack webhook: {e}")
         return ""
