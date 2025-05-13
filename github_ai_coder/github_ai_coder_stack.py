@@ -39,6 +39,12 @@ class GithubAiCoderStack(Stack):
             secret_name="dev/github_token",
         )
 
+        # 2) Import existing GitHub token secret
+        slack_webhook = secretsmanager.Secret.from_secret_name_v2(
+            self, "SlackWebhookUrlSecret",
+            secret_name="dev/slack-webhook",
+        )
+
         # 3) PR-review Lambda
         pr_review_fn = PythonFunction(
             self, "PRReviewFunction",
@@ -54,8 +60,24 @@ class GithubAiCoderStack(Stack):
             },
         )
 
+        # 3) PR-review Lambda
+        notify_slack_fn = PythonFunction(
+            self, "NotifySlackFunction",
+            entry="lambda/",             # your code folder
+            index="notify_slack_handler.py",
+            handler="lambda_handler",
+            runtime=_lambda.Runtime.PYTHON_3_11,
+            timeout=Duration.minutes(1),
+            environment={
+                "POWERTOOLS_SERVICE_NAME": "pr-reviewer",
+                "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
+                "LOG_LEVEL": "INFO"
+                  },
+        )
+
         # Grant it read access to the GitHub token
         gh_token.grant_read(pr_review_fn)
+        slack_webhook.grant_read(notify_slack_fn)
 
         # Allow the Lambda to call Bedrock
         pr_review_fn.add_to_role_policy(iam.PolicyStatement(
@@ -69,7 +91,7 @@ class GithubAiCoderStack(Stack):
         # Now let Step Functions invoke the PR-review Lambda (tighten resource to this function only)
         sfn_role.add_to_policy(iam.PolicyStatement(
             actions=["lambda:InvokeFunction"],
-            resources=[pr_review_fn.function_arn],
+            resources=[pr_review_fn.function_arn, notify_slack_fn.function_arn],
         ))
 
         # 4) State Machine
@@ -80,7 +102,8 @@ class GithubAiCoderStack(Stack):
             self, "PRReviewerWorkflow",
             definition_body=definition,
             definition_substitutions={
-                "INVOKE_LAMBDA_FUNCTION_ARN": pr_review_fn.function_arn,
+                "INVOKE_PR_REVIEW_FUNCTION_ARN": pr_review_fn.function_arn,
+                "INVOKE_NOTIFY_SLACK_FUNCTION_ARN": notify_slack_fn.function_arn,
             },
             role=sfn_role,
             state_machine_type=sfn.StateMachineType.STANDARD,

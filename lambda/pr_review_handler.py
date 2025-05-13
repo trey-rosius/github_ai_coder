@@ -65,11 +65,13 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             return _response(200, {"reviews": reviews})
 
         elif action == "post_comments":
-            missing = [k for k in ("repository", "pull_request_number", "owner", "reviews") if not event.get(k)]
-            if missing:
-                msg = f"Missing parameters for post_comments: {missing}"
-                logger.error(msg)
-                return _response(400, {"error": msg})
+            # ---------- validation -------------------------------------------------
+            required = ("repository", "pull_request_number", "owner", "reviews")
+            if missing := [k for k in required if not event.get(k)]:
+                return _response(
+                    400,
+                    {"error": f"Missing parameters for post_comments: {', '.join(missing)}"},
+                )
 
             result = post_review_comments(
                 repo_name=event["repository"],

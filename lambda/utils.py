@@ -258,3 +258,27 @@ def get_github_token() -> str:
     except Exception as e:
         print(f"Error retrieving github token key: {e}")
         return ""
+
+def get_slack_webhook() -> str:
+    """
+    Fetch Stripe secret key from AWS Secrets Manager.
+    Adjust the SecretId and region name based on your setup.
+    """
+    secret_name = "dev/slack-webhook"  # Replace with your actual secret name for Github
+    region_name = "us-east-1"  # Replace with your secrets region
+
+    # Create a session and Secrets Manager client
+
+    try:
+        # Retrieve the secret value
+        response = client.get_secret_value(SecretId=secret_name)
+        secret_string = response[
+            "SecretString"
+        ]
+        secret_dict = json.loads(secret_string)
+
+        # Adjust the key used here to match your secret's JSON structure
+        return secret_dict.get("SLACK_WEBHOOK_URL", "")
+    except Exception as e:
+        print(f"Error retrieving slack webhook: {e}")
+        return ""
