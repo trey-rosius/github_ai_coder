@@ -39,7 +39,7 @@ class GithubAiCoderStack(Stack):
             secret_name="dev/github_token",
         )
 
-        # 2) Import existing GitHub token secret
+        # 2) Import existing Slack Webhook secret
         slack_webhook = secretsmanager.Secret.from_secret_name_v2(
             self, "SlackWebhookUrlSecret",
             secret_name="dev/slack-webhook",
@@ -60,7 +60,7 @@ class GithubAiCoderStack(Stack):
             },
         )
 
-        # 3) PR-review Lambda
+        # 3) notify slack Lambda function
         notify_slack_fn = PythonFunction(
             self, "NotifySlackFunction",
             entry="lambda/",             # your code folder
@@ -69,8 +69,8 @@ class GithubAiCoderStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_11,
             timeout=Duration.minutes(1),
             environment={
-                "POWERTOOLS_SERVICE_NAME": "pr-reviewer",
-                "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
+                "POWERTOOLS_SERVICE_NAME": "notity-slack",
+                "POWERTOOLS_METRICS_NAMESPACE": "NotifySlack",
                 "LOG_LEVEL": "INFO"
                   },
         )
@@ -143,8 +143,8 @@ class GithubAiCoderStack(Stack):
             runtime=_lambda.Runtime.PYTHON_3_11,
             timeout=Duration.seconds(30),
             environment={
-                "POWERTOOLS_SERVICE_NAME": "pr-reviewer-api",
-                "POWERTOOLS_METRICS_NAMESPACE": "PRReviewer",
+                "POWERTOOLS_SERVICE_NAME": "api-handler",
+                "POWERTOOLS_METRICS_NAMESPACE": "ApiHandler",
                 "LOG_LEVEL": "INFO",
                 "STATE_MACHINE_ARN": workflow.state_machine_arn,
             },
@@ -152,6 +152,7 @@ class GithubAiCoderStack(Stack):
 
         # Grant it right to start & describe our state machine only
         workflow.grant_start_execution(api_handler)
+
         api_handler.add_to_role_policy(iam.PolicyStatement(
             actions=["states:DescribeExecution"],
             resources=["*"],
@@ -168,6 +169,7 @@ class GithubAiCoderStack(Stack):
         ))
 
         # 7) Wire up REST endpoints
+
         review = api.root.add_resource("review")
         review.add_method(
             "POST",
@@ -177,6 +179,13 @@ class GithubAiCoderStack(Stack):
 
         status = api.root.add_resource("status").add_resource("{sfnExecutionArn}")
         status.add_method(
+            "GET",
+            apigateway.LambdaIntegration(api_handler),
+            api_key_required=True,
+        )
+
+        vibe_code = api.root.add_resource("vibe").add_resource("{code}")
+        vibe_code.add_method(
             "GET",
             apigateway.LambdaIntegration(api_handler),
             api_key_required=True,
